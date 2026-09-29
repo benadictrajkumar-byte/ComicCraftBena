@@ -1,0 +1,59 @@
+# ComicCraft — AI Comic Story Creator
+
+> ComicCraft turns a one-sentence story prompt into a five-panel comic book:
+> structured outline, tone-matched narration and dialogue, illustrated panels,
+> and a professionally paged PDF export. Comics are persisted in PostgreSQL and
+> can be re-opened or re-downloaded at any time.
+
+## Pages
+
+- `/` — Studio home. Hero, the Story Console creation form (prompt, character,
+  setting, tone, art style), pipeline explainer, live art-engine showcase and a
+  recent-comics teaser.
+- `/comic/[id]` — Comic preview. Panel-by-panel reading view with header
+  metadata, panel index anchors, per-panel illustration, scene description,
+  caption, narration, speech-bubble dialogue, image-prompt reference, and the
+  PDF download action.
+- `/export/success` — Confirmation page shown after the PDF download is
+  triggered; links back to creation, the comic, and the library.
+- `/library` — Archive grid of every generated comic with SVG mini-covers,
+  tone/style chips, engine badge and dates.
+
+## API
+
+- `POST /api/generate` — Run the full pipeline from JSON
+  `{ prompt, character, setting, tone, style }`. Persists the comic and returns
+  `{ comic, pdfUrl, previewUrl }` (HTTP 201).
+- `GET /api/comics` — List the most recent comics.
+- `GET /api/comics/[id]` — Full bound layout JSON for one comic (404 when
+  missing).
+- `GET /api/export/[id]` — Streams the compiled PDF with a timestamped
+  `Content-Disposition` attachment filename.
+- `GET|POST /api/test-image` — Developer utility that exercises the image
+  stage in isolation; returns an SVG (or diffusion PNG when enabled).
+- `GET /api/health` — Service health check.
+
+## Generation pipeline
+
+1. Outline — Gemini Flash (fallback: local story engine) produces the
+   structured 5-panel outline: panel number, title, scene, image prompt.
+2. Story — Gemini Pro (same fallback) expands it into captions, narration and
+   dialogue honouring the requested tone.
+3. Art — each panel is illustrated from its image prompt by the built-in SVG
+   art engine; when `HF_API_KEY` is configured a Stable Diffusion backend via
+   the Hugging Face Inference API provides raster art instead.
+4. Layout — outline + story + art are bound into the stored panel list.
+5. Export — the PDF compiler (pdf-lib) renders cover, panel pages and back
+   page from the same descriptors the web preview uses.
+
+## Environment
+
+- `DATABASE_URL` — PostgreSQL connection string (required).
+- `GEMINI_API_KEY` — Google Generative AI key (optional; enables Gemini stages).
+- `HF_API_KEY` — Hugging Face token (optional; enables diffusion art).
+
+## Data
+
+Single table `comics`: id (uuid), title, prompt, character, setting, tone,
+style, engine, panels (jsonb — the bound layout list), created_at.
+Applied via `npx drizzle-kit push`.
